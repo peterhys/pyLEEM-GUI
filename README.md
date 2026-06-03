@@ -5,7 +5,7 @@
 
 pyLEEM-GUI is a graphical interface for viewing and analyzing Low
 Energy Electron Microscopy (LEEM) data. It builds on the
-[pyLEEM](https://github.com/peterhys/PyLEEM) backend to view image
+[pyLEEM](https://github.com/peterhys/pyLEEM) backend to view image
 stacks, inspect metadata, and analyze profiles and patterns.
 
 ## Installation
@@ -23,7 +23,7 @@ pip install -e .
 To run the application, use the command:
 
 ```bash
-pyleem
+pyleem-gui
 ```
 
 ## License
