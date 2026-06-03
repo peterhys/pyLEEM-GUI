@@ -1,0 +1,85 @@
+[build-system]
+requires = ["setuptools>=77.0.3", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyleem-gui"
+version = "0.1.0"
+description = "GUI for viewing and analyzing LEEM data"
+readme = "README.md"
+license = "BSD-3-Clause"
+license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_LICENSES"]
+authors = [{ name = "Peter Sun", email = "hs859@cornell.edu" }]
+maintainers = [{ name = "Peter Sun", email = "hs859@cornell.edu" }]
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+    "Environment :: X11 Applications :: Qt",
+]
+dependencies = [
+    "pyleem>=0.2.0",
+    "PySide6>=6.7",
+    "pyqtgraph>=0.13.3",
+    "numpy>=2",
+    "tifffile>=2024.1.30",
+    "pandas>=2.2",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=9.0.2", "pytest-cov>=7.0.0", "coverage>=7.13.4", "pytest-qt>=4.4.0"]
+docs = [
+    "sphinx>=9.0.4",
+    "sphinx-book-theme>=1.1.4",
+    "myst-parser"
+]
+
+[project.scripts]
+pyleem-gui = "pyleem_gui.app:main"
+
+[project.urls]
+Repository = "https://github.com/peterhys/pyLEEM-GUI"
+
+[tool.setuptools.packages.find]
+include = ["pyleem_gui*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source_pkgs = ["pyleem_gui"]
+omit = ["tests/*"]
+
+[tool.tox]
+env_list = ["py311", "py312", "coverage", "docs"]
+
+[tool.tox.gh.python]
+"3.11" = ["py311"]
+"3.12" = ["py312"]
+
+[tool.tox.env_run_base]
+package = "wheel"
+extras = ["test"]
+commands = [["pytest"]]
+
+[tool.tox.env.coverage]
+package = "wheel"
+extras = ["test"]
+commands = [["pytest", "--cov=pyleem_gui", "--cov-report=html"]]
+
+[tool.tox.env.docs]
+package = "wheel"
+extras = ["docs"]
+commands = [
+    [
+        "sphinx-build",
+        "-W",
+        "-b",
+        "html",
+        "-d",
+        "{work_dir}/docs",
+        "docs",
+        "{tox_root}/docs/_build/html"
+    ]
+]
