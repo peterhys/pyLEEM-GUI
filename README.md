@@ -3,10 +3,13 @@
 [![License: BSD 3-Clause](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
-pyLEEM-GUI is a graphical interface for viewing and analyzing Low
-Energy Electron Microscopy (LEEM) data. It builds on the
-[pyLEEM](https://github.com/peterhys/pyLEEM) backend to view image
-stacks, inspect metadata, and analyze profiles and patterns.
+pyLEEM-GUI is a workflow tool for large Low Energy Electron Microscopy (LEEM)
+image stacks: data and metadata extraction, visualization, and analysis. It
+builds on [pyqtgraph](https://www.pyqtgraph.org/) for visualization and the
+[pyLEEM](https://github.com/peterhys/pyLEEM) backend for decoding and analysis.
+Features are plugins shown as tabs (autocontrast, ROI, profile, export), and a
+processing sequence can be saved as a shareable workflow file. Plugin logic also
+runs from a script, the CLI, or a Jupyter notebook.
 
 ## Installation
 

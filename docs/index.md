@@ -6,6 +6,7 @@
 :maxdepth: 2
 :caption: Contents
 
+design
 LICENSE
 NOTICE
 ```
