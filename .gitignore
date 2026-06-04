@@ -94,3 +94,4 @@ cython_debug/
 *.h5
 *.dat
 data/*
+_*/
