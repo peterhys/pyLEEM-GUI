@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pyleem-gui"
 version = "0.1.0"
-description = "GUI for viewing and analyzing LEEM data"
+description = "GUI for processing LEEM data"
 readme = "README.md"
 license = "BSD-3-Clause"
 license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_LICENSES"]
@@ -24,7 +24,7 @@ dependencies = [
     "pyqtgraph>=0.13.3",
     "numpy>=2",
     "tifffile>=2024.1.30",
-    "pandas>=2.2",
+    "roifile>=2024.1.10",
 ]
 
 [project.optional-dependencies]
