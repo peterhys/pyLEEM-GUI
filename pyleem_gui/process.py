@@ -1,32 +1,30 @@
-"""The process registry and process list."""
+"""Qt-free process registry, workflow state, and load coordination."""
 
 import json
+import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable
 
 import numpy as np
 
+log = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class ProcessSpec:
-    """One process type: a function bundled with its metadata.
-
-    The allowed kind_id are: ``edit``, ``render``, ``output``.
-    ``edit``: destructive processes
-    ``render``: non-destructive processes
-    ``output``: analysis related processes
-    """
+    """One process type and its registered callable."""
 
     process_id: str
     version: str
-    kind_id: str
-    display_id: str
-    description: str
+    kind: str
+    label: str
+    help: str
     apply: Callable[[np.ndarray, dict], Any]
     params_schema: dict = field(default_factory=dict)
 
 
-# Module-level registry, keyed by ProcessSpec.process_id.
+# ProcessSpec.process_id -> ProcessSpec.
 REGISTRY: dict[str, ProcessSpec] = {}
 
 
@@ -36,34 +34,26 @@ def register(spec):
 
 
 def get_spec(spec_id):
-    """Look up a registered `ProcessSpec` by process_id.
-
-    :raises KeyError: if no process with that process_id is registered.
-    """
+    """Look up a registered process spec."""
     try:
         return REGISTRY[spec_id]
     except KeyError:
         raise KeyError(f"unknown process: {spec_id!r}") from None
 
 
-def process(*, process_id, version, kind_id, display_id, help, params_schema=None):
-    """Decorator that registers a function as a process.
-
-    Returns the function unchanged so it stays a normal importable callable.
-    """
-    if kind_id not in ("edit", "render", "output"):
-        raise ValueError(
-            f"kind_id must be 'edit', 'render', or 'output', got {kind_id!r}"
-        )
+def process(*, process_id, version, kind, label, help, params_schema=None):
+    """Decorator that registers a process function."""
+    if kind not in ("edit", "render", "analysis"):
+        raise ValueError(f"kind must be 'edit', 'render', or 'analysis', got {kind!r}")
 
     def decorate(fn):
         register(
             ProcessSpec(
                 process_id=process_id,
                 version=version,
-                kind_id=kind_id,
-                display_id=display_id,
-                description=help,
+                kind=kind,
+                label=label,
+                help=help,
                 apply=fn,
                 params_schema=params_schema or {},
             )
@@ -117,42 +107,152 @@ class ProcessList:
     def __getitem__(self, index):
         return self.items[index]
 
-    def to_json(self):
-        """Serialize the process list to a workflow document."""
-        return json.dumps([proc.to_dict() for proc in self.items], indent=2)
-
-    @classmethod
-    def from_json(cls, text):
-        """Load a workflow document into a process list."""
-        return cls([Process.from_dict(d) for d in json.loads(text)])
-
 
 def apply_edited(processes, image):
     """Run the edit (destructive) processes in order; return the new image."""
     out = image
     for proc in processes:
         spec = get_spec(proc.process_id)
-        if spec.kind_id == "edit":
+        if spec.kind == "edit":
             out = spec.apply(out, filled_params(spec, proc.params))
     return out
 
 
 def view_spec_of(processes, image):
-    """Merge the view specs of the render (non-destructive) processes."""
+    """Merge render-process view specs without changing pixels."""
     view_spec = {}
     for proc in processes:
         spec = get_spec(proc.process_id)
-        if spec.kind_id == "render":
+        if spec.kind == "render":
             view_spec.update(spec.apply(image, filled_params(spec, proc.params)))
     return view_spec
 
 
-def apply_processes(processes, image):
-    """Apply a process list to one slice.
+class Signal:
+    """A minimal Qt-free signal: connected callbacks are called on emit."""
 
-    Edit processes run in order to produce the modified image; render processes
-    then run on that image, their view specs merged. Returns
-    ``(image, view_spec)``.
-    """
-    out = apply_edited(processes, image)
-    return out, view_spec_of(processes, out)
+    def __init__(self):
+        self._slots = []
+
+    def connect(self, slot):
+        self._slots.append(slot)
+
+    def emit(self, *args):
+        for slot in list(self._slots):
+            slot(*args)
+
+
+class ProcessLayer:
+    """App-level process list and workflow state."""
+
+    def __init__(self, processes=None):
+        self.processes = processes if processes is not None else ProcessList()
+        self.analysis = {}  # analysis component id -> persisted params
+        self.process_update = Signal()  # change kind: "edit" | "render" | "analysis"
+
+    # process list
+    def add_process(self, proc):
+        self.processes.add(proc)
+        self.process_update.emit(self._kind_of(proc))
+
+    def delete_process(self, index):
+        proc = self.processes[index]
+        self.processes.delete(index)
+        self.process_update.emit(self._kind_of(proc))
+
+    def update_process(self, index, params):
+        """Replace one process's params and notify."""
+        proc = self.processes[index]
+        proc.params = dict(params)
+        self.process_update.emit(self._kind_of(proc))
+
+    def find_process(self, proc_id):
+        """Return the index of the first process with ``proc_id``, or None."""
+        for i, proc in enumerate(self.processes):
+            if proc.process_id == proc_id:
+                return i
+        return None
+
+    def _kind_of(self, proc):
+        # Unknown ids are treated as edits so subscribers recompute safely.
+        spec = REGISTRY.get(proc.process_id)
+        return spec.kind if spec is not None else "edit"
+
+    # workflow files
+    def update_analysis(self, component_id, params):
+        """Record or clear an analysis component's non-default params."""
+        params = dict(params)
+        if params:
+            if self.analysis.get(component_id) == params:
+                return
+            self.analysis[component_id] = params
+        elif component_id in self.analysis:
+            del self.analysis[component_id]
+        else:
+            return
+        self.process_update.emit("analysis")
+
+    def load_workflow(self, path):
+        """Replace workflow state from disk without notifying."""
+        doc = json.loads(Path(path).read_text())
+        if isinstance(doc, list):  # legacy bare process array
+            raw_processes, analysis = doc, {}
+        else:
+            raw_processes = doc.get("processes", [])
+            analysis = doc.get("analysis", {})
+        kept = []
+        for proc in (Process.from_dict(d) for d in raw_processes):
+            if proc.process_id in REGISTRY:
+                kept.append(proc)
+            else:
+                log.warning(
+                    "skipping unknown process %r in workflow %s",
+                    proc.process_id,
+                    path,
+                )
+        self.processes = ProcessList(kept)
+        self.analysis = dict(analysis)
+
+    def import_workflow(self, path):
+        """Load a workflow file and emit ``process_update("edit")``."""
+        self.load_workflow(path)
+        self.process_update.emit("edit")
+
+    def save_workflow(self, path):
+        """Save the process list and analysis settings to a workflow document."""
+        doc = {
+            "version": 1,
+            "processes": [proc.to_dict() for proc in self.processes],
+            "analysis": dict(self.analysis),
+        }
+        Path(path).write_text(json.dumps(doc, indent=2))
+
+
+class ProcessingCoordinator:
+    """Orders workflow sync before image refresh for major loads."""
+
+    def __init__(self, images):
+        self.images = images
+        self.workflow = images.workflow
+
+    def import_workflow(self, path):
+        """Load a workflow file, then reconcile."""
+        self.workflow.load_workflow(path)
+        self.reconcile("process")
+
+    def open_file(self, path):
+        """Open a single file, then reconcile."""
+        self.images.load_file(path)
+        self.reconcile("open")
+
+    def open_folder(self, path):
+        """Open a folder, then reconcile (see `open_file`)."""
+        self.images.load_folder(path)
+        self.reconcile("open")
+
+    def reconcile(self, image_reason):
+        """Sync workflow consumers, then refresh image consumers."""
+        self.workflow.process_update.emit("sync")
+        self.images.invalidate()
+        if image_reason == "open" or self.images.n_frames > 0:
+            self.images.image_update.emit(image_reason)

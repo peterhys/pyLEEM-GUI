@@ -1,36 +1,67 @@
-"""Metadata formatting.
+"""Qt-free metadata display, numeric lookup, and ImageJ Info helpers."""
 
-Extra formatting for metadata. This is used to show better metdata data in
-the GUI. We also incorprate metadata into the TIFF export.
-"""
-
+import re
 from datetime import datetime
 
-# Binary blobs / raw byte fields to hide from the metadata display.
+# Raw byte fields hidden from the metadata display.
 META_SKIP = {"markup_data", "extra_leem_data", "LEEMdata"}
 
+# Per-frame header in exported ImageJ Info text.
+_FRAME_HEADER = re.compile(r"^\[Frame (\d+)\]$")
 
-def _parse_entry(value):
-    """Normalize a metadata entry to ``(value, unit)``.
 
-    Entries are either a ``(value, unit)`` tuple or a bare value.
-    """
+def parse_metadata_entry(value):
+    """Normalize a metadata entry to ``(value, unit)``."""
     if isinstance(value, tuple) and len(value) == 2:
         return value
     return value, None
 
 
-def metadata_rows(meta):
-    """Return ``(key, value, unit)`` display rows for a metadata dict.
+def numeric_value_or_none(value):
+    """``float(value)`` for a plain numeric entry, else None."""
+    if isinstance(value, (bytes, bytearray, datetime, bool)):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
-    Skips the binary blobs in :data:`META_SKIP` and any bytes-valued entry;
-    datetimes are rendered with ``isoformat()``. Units default to an empty string.
-    """
+
+def numeric_metadata_value(meta, key):
+    """Numeric metadata value for ``key``, or None."""
+    if key in META_SKIP or key not in meta:
+        return None
+    return numeric_value_or_none(parse_metadata_entry(meta[key])[0])
+
+
+def numeric_metadata_fields(metas):
+    """Numeric metadata fields as ``(key, unit)`` pairs."""
+    units = {}
+    for meta in metas:
+        for key, raw in meta.items():
+            if key in META_SKIP:
+                continue
+            value, unit = parse_metadata_entry(raw)
+            if numeric_value_or_none(value) is None:
+                continue
+            name = str(key)
+            if name not in units or (unit and not units[name]):
+                units[name] = str(unit) if unit else ""
+    return list(units.items())
+
+
+def axis_label(key, unit=""):
+    """Axis label with a square-bracket unit suffix."""
+    return f"{key} [{unit}]" if unit else str(key)
+
+
+def metadata_rows(meta):
+    """Return ``(key, value, unit)`` display rows."""
     rows = []
     for key, raw in meta.items():
         if key in META_SKIP:
             continue
-        value, unit = _parse_entry(raw)
+        value, unit = parse_metadata_entry(raw)
         if isinstance(value, bytes):
             continue
         if isinstance(value, datetime):
@@ -45,17 +76,53 @@ def _info_line(key, value, unit):
 
 
 def imagej_info(frame_metadatas):
-    """Build the ImageJ ``Info`` text for an exported TIFF.
-
-    ``frame_metadatas`` is the list of per-frame metadata dicts in export order. A
-    single frame yields plain ``key = value [unit]`` lines; multiple frames are
-    grouped into ``[Frame N]`` sections. This is the format the bundled ImageJ
-    overlay plugins (see ``pyleem-plugin-test``) parse to draw each slice's
-    metadata, so the skip-list here matches theirs.
-    """
+    """Build ImageJ ``Info`` text for exported TIFF metadata."""
     single = len(frame_metadatas) == 1
     blocks = []
     for n, meta in enumerate(frame_metadatas):
         body = "\n".join(_info_line(*row) for row in metadata_rows(meta))
         blocks.append(body if single else "[Frame %d]\n%s" % (n, body))
     return "\n".join(blocks)
+
+
+def _coerce_value(text):
+    """Coerce a metadata value string to int or float when numeric, else keep it."""
+    try:
+        return int(text)
+    except ValueError:
+        pass
+    try:
+        return float(text)
+    except ValueError:
+        return text
+
+
+def _split_value_unit(rest):
+    """Split a metadata value string into ``(value, unit)``."""
+    rest = rest.strip()
+    if rest.endswith("]") and " [" in rest:
+        value_text, unit = rest.rsplit(" [", 1)
+        return _coerce_value(value_text.strip()), (unit[:-1].strip() or None)
+    return _coerce_value(rest), None
+
+
+def parse_imagej_info(info, n_frames):
+    """Parse pyLEEM-GUI ImageJ ``Info`` text into per-frame metadata."""
+    metas = [{} for _ in range(n_frames)]
+    if not info:
+        return metas
+    current = 0
+    for line in info.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        header = _FRAME_HEADER.match(line)
+        if header:
+            current = int(header.group(1))
+            continue
+        if " = " not in line:
+            continue
+        key, rest = line.split(" = ", 1)
+        if 0 <= current < n_frames:
+            metas[current][key.strip()] = _split_value_unit(rest)
+    return metas
