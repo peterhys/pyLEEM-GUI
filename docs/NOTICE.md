@@ -3,8 +3,5 @@
 ```{include} ../NOTICE
 ```
 
-## Third-Party Licenses
-
-```{literalinclude} ../THIRD_PARTY_LICENSES
-:language: text
-```
+Third-party dependencies are distributed under their own licenses; see
+[Third-Party Licenses](THIRD_PARTY_LICENSES.md).
