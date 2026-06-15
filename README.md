@@ -8,8 +8,7 @@ image stacks: data and metadata extraction, visualization, and analysis. It
 builds on [pyqtgraph](https://www.pyqtgraph.org/) for visualization and the
 [pyLEEM](https://github.com/peterhys/pyLEEM) backend for decoding and analysis.
 Features are plugins shown as tabs (autocontrast, ROI, profile, export), and a
-processing sequence can be saved as a shareable workflow file. Plugin logic also
-runs from a script, the CLI, or a Jupyter notebook.
+processing sequence can be saved as a shareable workflow file.
 
 ## Installation
 
