@@ -13,48 +13,75 @@ for the visualization and
 We provide APIs for extending the GUI with custom plugins and
 preconfigured workflows.
 
-## Architecture
+The architecture is designed to be modular and extensible. Plugins
+can be added to the GUI with provided [APIs](api.md).
 
-The architecture is designed to be modular and extensible.
-The core of the architecture is the interaction layer, where
-each plugins can access and modify. The plugins communicate through
-the interaction layer.
 
-```text
-               image + metadata 
-                     |                     
-            [ interaction layer ]
-                     |                  
-        +------------+------------+
-metadata reader   profiler    other plugins
-```
+## Layers
 
-Because most of the dataset are large data stacks, we cannot store
-all files in memory. Instead, we create a sequential modification
-registry to keep track of the plugin modifications, and applies to
-the image when the image is accessed. The modifications are applied
-in order and an indicator of the modification is displayed. Two
-types of modifications are supported: display and edit. Edit can modify
-the data, and display only changes the appearance and is applied after the edit.
+There are three layers that interact with the data:
 
-## Plugins
+| Layer | Owns | Does not own |
+| --- | --- | --- |
+| `ProcessLayer` | Process list, analysis settings, workflow import/export | Image files or frame index |
+| `ImageLayer` | Dataset, current frame, metadata, one-frame edited cache | Display mode |
+| `ViewLayer` | Raw/edited/rendered display mode and rendered output | Dataset or workflow |
 
-The plugins are the core of the architecture and community support.
-All the modifications are done through plugins, which shows as tabs.
-We provide several default plugins such as autocontrast, ROI, profile, and
-export.
+`ProcessLayer` is app-level state. It persists when new images are opened.
+`ImageLayer` is per-dataset state. Opening data replaces its dataset, resets the
+frame index, and clears the edited cache. `ViewLayer` is owned by the viewer and
+asks the image layer for the current output.
 
-To speed up the plugin development, we provide basic plugin template for
-user to add additional functionalities to the GUI, without coding
-the GUI components but rather focusing on the data processing logic.
-The approach allows CLI usage and jupyter notebook usage of the
-plugin functionalities.
+## Signals
 
-The plugin API are documented in [api.md](api.md).
+There are two update channels:
+
+| Channel | Owner | Tags |
+| --- | --- | --- |
+| `process_update(kind)` | `ProcessLayer` | `edit`, `render`, `analysis`, `sync` |
+| `image_update(reason)` | `ImageLayer` | `open`, `frame`, `process`, `mode`, `roi` |
+
+The image layer subscribes to `process_update`. It ignores `analysis` and
+`sync`, invalidates the edited cache for edit changes, and emits
+`image_update("process")` when loaded frames need redraw.
+
+The view layer owns no signal. A mode change emits `image_update("mode")`.
+The shared ROI service also uses `image_update("roi")`.
+
 
 ## Workflow
 
-As a user facility oriented software, we provide workflow file that can
-apply the image processing directly. This allows staff and user to share
-and standardize the image processing workflow.
+A workflow is an ordered list of `Process(process_id, params)` plus an analysis
+settings map. Processes are appended and deleted; they are not reordered.
 
+| Kind | Meaning | Output |
+| --- | --- | --- |
+| `edit` | Changes image data | New image array |
+| `render` | Changes display only | View spec such as levels |
+| `analysis` | Plugin widget settings | Stored in the analysis map |
+
+For display purposes:
+
+```text
+raw frame -> edit processes -> rendered image -> viewer
+```
+
+For analysis purposes:
+
+```text
+raw frame -> edit processes -> analysis components -> plugins
+```
+
+The complete workflow process can be saved and loaded as a JSON file.
+
+## Plugins
+
+Plugins provide necessary functionality for the workflow.
+
+Plugins are tabs built from declarative specs. A plugin module calls `plugin()`
+and declares edit, render, or analysis components. `AutoTab` builds the Qt
+controls, toggles, parameter forms, process-list wiring, and status updates.
+
+Plugins read image data through `PluginContext.images`, submit workflow changes
+through `PluginContext.workflow`, and must not import each other. Shared
+cross-plugin state, such as the active ROI notice, belongs in shared services.

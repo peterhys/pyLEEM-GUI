@@ -2,18 +2,13 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 import sys
 
-
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 project = "pyLEEM-GUI"
 author = "Peter Sun"
 
-try:
-    release = version("pyleem-gui")
-except PackageNotFoundError:
-    release = "0.1.0"
-
+release = version("pyleem-gui")
 version = release
 
 extensions = [
@@ -25,7 +20,7 @@ extensions = [
 ]
 
 templates_path = ["_templates"]
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+exclude_patterns = ["_build", "superpowers", "Thumbs.db", ".DS_Store"]
 
 autosummary_generate = True
 autodoc_member_order = "bysource"

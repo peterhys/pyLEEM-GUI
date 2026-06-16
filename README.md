@@ -8,8 +8,7 @@ image stacks: data and metadata extraction, visualization, and analysis. It
 builds on [pyqtgraph](https://www.pyqtgraph.org/) for visualization and the
 [pyLEEM](https://github.com/peterhys/pyLEEM) backend for decoding and analysis.
 Features are plugins shown as tabs (autocontrast, ROI, profile, export), and a
-processing sequence can be saved as a shareable workflow file. Plugin logic also
-runs from a script, the CLI, or a Jupyter notebook.
+processing sequence can be saved as a shareable workflow file.
 
 ## Installation
 
@@ -28,6 +27,29 @@ To run the application, use the command:
 ```bash
 pyleem-gui
 ```
+
+## Features
+
+The package is designed to be extensible. Plugins can be added to the GUI with
+provided APIs. For more details, please refer to the [Design](docs/design.md) page.
+
+### Plugins
+
+Plugins for image manipulation, metadata extraction, overlay visualization, and
+analysis can be added to the GUI with provided APIs. 
+
+Provided plugins include:
+- Level operations (Builtin): autolevel, manual level
+- Metadata extraction (Metadata)
+- Overlay visualization (Builtin): ROI
+- Analysis: image profiling (Line Profile), image stack profiling and
+  correlation plotting (Stack Profile)
+
+### Workflow
+
+For particular sequences of operations, the user can load or save a workflow
+file in JSON format. And the workflow is presented in the process bar of the GUI.
+
 
 ## License
 

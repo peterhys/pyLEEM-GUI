@@ -1,5 +1,5 @@
 ```{include} ../README.md
-:relative-docs: ..
+:relative-docs: docs/
 ```
 
 ```{toctree}
@@ -7,6 +7,9 @@
 :caption: Contents
 
 design
+api
+plugins/index
 LICENSE
 NOTICE
+THIRD_PARTY_LICENSES
 ```
